@@ -7,15 +7,24 @@ use std::process::Command;
 
 fn main() {
     let manifest_dir_opt = env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from);
+    let debug = env::var("DEBUG").unwrap_or_default() == "true";
     let manifest_dir = manifest_dir_opt.as_deref().unwrap_or(Path::new(""));
 
-    cc::Build::new()
+    let mut build = cc::Build::new();
+    build
         .file(manifest_dir.join("src/cxx.cc"))
         .cpp(true)
+        .debug(debug)
         .cpp_link_stdlib(None) // linked via link-cplusplus crate
         .std(cxxbridge_flags::STD)
-        .warnings_into_errors(cfg!(deny_warnings))
-        .compile("cxxbridge1");
+        .warnings_into_errors(cfg!(deny_warnings));
+
+    // if we are on windows, set the  crt to debug. This only works for dynamic linking.
+    // If you need static linking, we need /MTd and /MT
+    #[cfg(windows)]
+    build.flag(if debug { "/MDd" } else { "/MD" });
+
+    build.compile("cxxbridge1");
 
     println!("cargo:rerun-if-changed=src/cxx.cc");
     println!("cargo:rerun-if-changed=include/cxx.h");
